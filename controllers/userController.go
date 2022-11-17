@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"mongo-api/database"
-	helper "mongo-api/helpers"
+	helpers "mongo-api/helpers"
 	"mongo-api/models"
 	"net/http"
 	"time"
@@ -43,9 +43,12 @@ func SignUp() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Email already exists"})
 			return
 		}
+		password := helpers.HashPassword(*user.Password)
+		user.Password = &password
+
 		user.ID = primitive.NewObjectID()
 		user.User_id = user.ID.Hex()
-		token, refreshToken, _ := helper.GenerateTokens(*user.Email, *user.First_name, *user.Last_name, *user.User_type)
+		token, refreshToken, _ := helpers.GenerateTokens(*user.Email, *user.First_name, *user.Last_name, *user.User_type)
 		user.Token = &token
 		user.Refresh_token = &refreshToken
 		rowNumber, err := userCollection.InsertOne(ctx, user)
@@ -57,10 +60,36 @@ func SignUp() gin.HandlerFunc {
 	}
 }
 func Login() gin.HandlerFunc {
-	fmt.Println("Login")
-	return nil
-}
+	return func(c *gin.Context) {
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		defer cancel()
+		var user models.User
+		var foundUser models.User
+		if err := c.BindJSON(&user); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		err := userCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&foundUser)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
 
+		}
+		correct, err := helpers.VerifyPassword(*user.Password, *foundUser.Password)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
+		token, refreshToken, _ := helpers.GenerateTokens(*foundUser.Email, *foundUser.First_name, *foundUser.Last_name, *foundUser.User_type)
+		foundUser.Token = &token
+		foundUser.Refresh_token = &refreshToken
+		if correct {
+			c.JSON(http.StatusOK, foundUser)
+			return
+		}
+
+	}
+}
 func GetUsers() gin.HandlerFunc {
 	fmt.Println("ok")
 	return nil
@@ -69,7 +98,7 @@ func GetUsers() gin.HandlerFunc {
 func GetUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("user_id")
-		if err := helper.MathUserTypeToUId(c, id); err != nil {
+		if err := helpers.MathUserTypeToUId(c, id); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
