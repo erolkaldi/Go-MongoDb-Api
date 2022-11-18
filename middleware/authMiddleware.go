@@ -13,7 +13,7 @@ func Authenticate() gin.HandlerFunc {
 		token := c.Request.Header.Get("Authorization")
 
 		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": http.StatusUnauthorized})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "token not found"})
 			c.Abort()
 			return
 		}
@@ -21,7 +21,7 @@ func Authenticate() gin.HandlerFunc {
 		token = arry[1]
 		claims, err := helpers.Validatetoken(token)
 		if err != "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err, "tkn": token})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err})
 			c.Abort()
 			return
 		}
